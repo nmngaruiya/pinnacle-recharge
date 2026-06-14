@@ -1,0 +1,9 @@
+# Secrets — never commit these
+.env
+
+# Dependencies — Render installs these itself
+node_modules/
+
+# Logs and OS files
+*.log
+.DS_Store
