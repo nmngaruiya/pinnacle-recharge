@@ -123,10 +123,17 @@ async function sellWithRetry(meter, baseAmount, maxBumps = 3) {
 // ────────────────────────────────────────────────
 // M-Pesa Daraja
 // ────────────────────────────────────────────────
+// Set MPESA_ENV=sandbox in Render to test against Safaricom's test environment;
+// leave unset (or =production) for the live paybill. Sandbox and production use
+// DIFFERENT credentials — don't mix them.
+const MPESA_BASE = (process.env.MPESA_ENV === 'sandbox')
+  ? 'https://sandbox.safaricom.co.ke'
+  : 'https://api.safaricom.co.ke';
+
 async function mpesaToken() {
   const auth = Buffer.from(`${process.env.MPESA_KEY}:${process.env.MPESA_SECRET}`).toString('base64');
   const { data } = await axios.get(
-    'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
+    `${MPESA_BASE}/oauth/v1/generate?grant_type=client_credentials`,
     { headers: { Authorization: `Basic ${auth}` } }
   );
   return data.access_token;
@@ -151,7 +158,7 @@ app.post('/api/stk-push', async (req, res) => {
     const ts = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
     const password = Buffer.from(process.env.SHORTCODE + process.env.PASSKEY + ts).toString('base64');
     const { data } = await axios.post(
-      'https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
+      `${MPESA_BASE}/mpesa/stkpush/v1/processrequest`,
       {
         BusinessShortCode: process.env.SHORTCODE,
         Password: password, Timestamp: ts,
