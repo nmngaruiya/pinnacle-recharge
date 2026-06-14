@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>EKM365 · Buy Tokens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a1f1a; --panel:#0f2d24; --line:#1d4a3c;
+  --green:#1db954; --green-bright:#3ddc84; --amber:#ffb627;
+  --text:#eafff5; --muted:#7fae9c; --red:#ff5a5a;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:'Sora',sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;display:flex;justify-content:center;
+  background-image:radial-gradient(circle at 20% 0%,#12382c 0%,transparent 45%),radial-gradient(circle at 90% 100%,#0d3326 0%,transparent 40%);
+}
+.app{width:100%;max-width:440px;min-height:100vh;display:flex;flex-direction:column;padding:24px 20px 32px}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:28px}
+.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--green),var(--green-bright));display:flex;align-items:center;justify-content:center;font-weight:800;color:#04150f;font-size:18px}
+.brand h1{font-size:17px;font-weight:700;letter-spacing:-.3px}
+.brand span{display:block;font-size:11px;color:var(--muted);font-weight:400;letter-spacing:1px;text-transform:uppercase}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:22px;margin-bottom:16px}
+.label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:9px;display:block}
+.field{position:relative;margin-bottom:18px}
+.field:last-child{margin-bottom:0}
+input{
+  width:100%;background:#08191300;border:1.5px solid var(--line);border-radius:13px;
+  padding:15px 16px;color:var(--text);font-family:'Space Mono',monospace;font-size:16px;
+  transition:border-color .2s,box-shadow .2s;
+}
+input:focus{outline:none;border-color:var(--green-bright);box-shadow:0 0 0 3px rgba(61,220,132,.13)}
+input::placeholder{color:#3d6657}
+
+.amounts{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:4px}
+.chip{background:#0a241b;border:1.5px solid var(--line);border-radius:12px;padding:13px 0;text-align:center;font-family:'Space Mono',monospace;font-weight:700;font-size:15px;cursor:pointer;transition:all .15s}
+.chip.active{border-color:var(--green-bright);background:rgba(61,220,132,.12);color:var(--green-bright)}
+
+.units{text-align:center;padding:8px 0 2px}
+.units .big{font-family:'Space Mono',monospace;font-size:34px;font-weight:700;color:var(--green-bright)}
+.units .sub{font-size:12px;color:var(--muted);margin-top:2px}
+
+.pay{
+  width:100%;border:none;border-radius:15px;padding:17px;margin-top:8px;
+  background:linear-gradient(135deg,var(--green),var(--green-bright));color:#04150f;
+  font-family:'Sora';font-weight:800;font-size:16px;cursor:pointer;letter-spacing:.2px;
+  transition:transform .12s,opacity .2s;display:flex;align-items:center;justify-content:center;gap:9px;
+}
+.pay:active{transform:scale(.98)}
+.pay:disabled{opacity:.5;cursor:not-allowed}
+
+.note{font-size:11.5px;color:var(--muted);text-align:center;margin-top:16px;line-height:1.6}
+.spinner{width:18px;height:18px;border:2.5px solid #04150f55;border-top-color:#04150f;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.status{display:none;text-align:center;padding:34px 22px}
+.status.show{display:block}
+.status .ring{width:64px;height:64px;margin:0 auto 18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px}
+.status.pending .ring{background:rgba(255,182,39,.15)}
+.status.pending .ring .spinner{width:30px;height:30px;border-width:3px;border-color:#ffb62744;border-top-color:var(--amber)}
+.status.ok .ring{background:rgba(61,220,132,.15);color:var(--green-bright)}
+.status.err .ring{background:rgba(255,90,90,.15);color:var(--red)}
+.status h2{font-size:19px;margin-bottom:7px}
+.status p{font-size:13.5px;color:var(--muted);line-height:1.6}
+.token{font-family:'Space Mono',monospace;font-size:22px;font-weight:700;letter-spacing:2px;color:var(--green-bright);background:#0a241b;border:1px dashed var(--line);border-radius:13px;padding:16px;margin:18px 0;word-break:break-all}
+.again{background:transparent;border:1.5px solid var(--line);color:var(--text);border-radius:13px;padding:13px 26px;font-family:'Sora';font-weight:600;cursor:pointer;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="brand">
+    <div class="logo">E</div>
+    <div><h1>EKM365 Tokens<span>Smart Meter Recharge</span></h1></div>
+  </div>
+
+  <!-- FORM -->
+  <div id="form">
+    <div class="card">
+      <div class="field">
+        <label class="label">Meter Number</label>
+        <input id="meter" inputmode="numeric" placeholder="e.g. 04123456789" autocomplete="off">
+      </div>
+      <div class="field">
+        <label class="label">M-Pesa Phone</label>
+        <input id="phone" inputmode="tel" placeholder="07XX XXX XXX" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="card">
+      <label class="label">Amount (KES)</label>
+      <div class="field" style="margin-bottom:12px">
+        <input id="amount" inputmode="numeric" placeholder="0" oninput="onAmount()">
+      </div>
+      <div class="amounts">
+        <div class="chip" onclick="setAmt(100)">100</div>
+        <div class="chip" onclick="setAmt(200)">200</div>
+        <div class="chip" onclick="setAmt(500)">500</div>
+        <div class="chip" onclick="setAmt(1000)">1,000</div>
+        <div class="chip" onclick="setAmt(2000)">2,000</div>
+        <div class="chip" onclick="setAmt(5000)">5,000</div>
+      </div>
+      <div class="units">
+        <div class="big" id="units">0.0</div>
+        <div class="sub">estimated kWh · KES <span id="rate">25.00</span>/unit</div>
+      </div>
+    </div>
+
+    <button class="pay" id="payBtn" onclick="pay()">Pay with M-Pesa</button>
+    <p class="note">You'll receive an STK push prompt on your phone. Enter your M-Pesa PIN to confirm. Units are credited automatically to your smart meter on payment.</p>
+  </div>
+
+  <!-- STATUS -->
+  <div class="card status" id="status">
+    <div class="ring" id="ring"></div>
+    <h2 id="stTitle"></h2>
+    <p id="stMsg"></p>
+    <div class="token" id="tokenBox" style="display:none"></div>
+    <button class="again" id="againBtn" style="display:none" onclick="reset()">Buy Again</button>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────
+// Point this at YOUR backend (see server code in chat). Never put M-Pesa/EKM secrets here.
+const API = "https://pinnacle-recharge.onrender.com";
+
+let amount = 0;
+let RATE = 31.00; // fallback until live rate loads from EKM via backend
+
+// Pull the current rate from the backend (which reads it from EKM).
+// Change the rate in EKM and this updates on its own — no app change.
+(async()=>{
+  try{
+    const r=await fetch(API+'/api/rate');
+    const d=await r.json();
+    if(d.rate){ RATE=d.rate; document.getElementById('rate').textContent=RATE.toFixed(2); refresh(); }
+  }catch(e){/* keep fallback */}
+})();
+document.getElementById('rate').textContent = RATE.toFixed(2);
+
+function onAmount(){ amount = parseInt(document.getElementById('amount').value||0); refresh(); document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active')); }
+function setAmt(v){ amount=v; document.getElementById('amount').value=v; refresh(); document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', +c.textContent.replace(/,/g,'')===v)); }
+function refresh(){ document.getElementById('units').textContent = (amount/RATE).toFixed(1); }
+
+function show(type,title,msg){
+  document.getElementById('form').style.display='none';
+  const s=document.getElementById('status');
+  s.className='card status show '+type;
+  document.getElementById('ring').innerHTML = type==='pending'?'<div class="spinner"></div>':type==='ok'?'✓':'✕';
+  document.getElementById('stTitle').textContent=title;
+  document.getElementById('stMsg').textContent=msg;
+}
+function reset(){
+  document.getElementById('status').className='card status';
+  document.getElementById('form').style.display='block';
+  document.getElementById('tokenBox').style.display='none';
+  document.getElementById('againBtn').style.display='none';
+}
+
+async function pay(){
+  const meter=document.getElementById('meter').value.trim();
+  let phone=document.getElementById('phone').value.replace(/\s/g,'');
+  if(!meter){alert('Enter meter number');return;}
+  if(!/^(07|01|2547|2541|\+2547|\+2541)\d{7,8}$/.test(phone)){alert('Enter a valid Safaricom number');return;}
+  if(amount<10){alert('Minimum amount is KES 10');return;}
+
+  // normalise to 2547XXXXXXXX
+  phone=phone.replace(/^\+/,''); if(phone.startsWith('0')) phone='254'+phone.slice(1);
+
+  const btn=document.getElementById('payBtn');
+  btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Sending…';
+
+  try{
+    // 1) Ask backend to trigger STK push
+    const res=await fetch(API+'/api/stk-push',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({meter,phone,amount})
+    });
+    const data=await res.json();
+    if(!res.ok||!data.checkoutRequestId) throw new Error(data.message||'Could not start payment');
+
+    show('pending','Check your phone','Enter your M-Pesa PIN to complete payment of KES '+amount+' to Pinnacle Developments (Paybill 4107817).');
+
+    // 2) Poll backend for result
+    poll(data.checkoutRequestId);
+  }catch(e){
+    show('err','Payment failed',e.message);
+    document.getElementById('againBtn').style.display='inline-block';
+  }finally{
+    btn.disabled=false; btn.innerHTML='Pay with M-Pesa';
+  }
+}
+
+async function poll(id,tries=0){
+  if(tries>40){ // ~2 min
+    show('err','Timed out','We didn’t get confirmation. If money was deducted, your token will be sent by SMS.');
+    document.getElementById('againBtn').style.display='inline-block';return;
+  }
+  try{
+    const r=await fetch(API+'/api/status/'+id);
+    const d=await r.json();
+    if(d.status==='SUCCESS'){
+      show('ok','Recharge sent','Payment received. Units have been sent directly to your meter — no token to enter.');
+      const tb=document.getElementById('tokenBox');
+      tb.style.display='block'; tb.textContent=(amount/RATE).toFixed(1)+' kWh credited';
+      document.getElementById('againBtn').style.display='inline-block';
+      return;
+    }
+    if(d.status==='FAILED'||d.status==='CANCELLED'){
+      show('err','Payment not completed',d.message||'The transaction was cancelled or declined.');
+      document.getElementById('againBtn').style.display='inline-block';return;
+    }
+  }catch(e){/* keep polling */}
+  setTimeout(()=>poll(id,tries+1),3000);
+}
+</script>
+</body>
+</html>

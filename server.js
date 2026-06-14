@@ -6,7 +6,24 @@ const axios = require('axios');
 const app = express();
 app.use(express.json());
 
+// ── CORS: let the static frontend (a different domain) call this backend ──
+// Set FRONTEND_ORIGIN in Render to your static-site URL, e.g.
+//   https://pinnacle-frontend.onrender.com
+// If unset, defaults to "*" (any site) so you can test — tighten it for production.
+const ALLOWED_ORIGIN = process.env.FRONTEND_ORIGIN || '*';
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204); // browser pre-flight check
+  next();
+});
+
+// Simple health check at the root so visiting the bare URL shows it's alive
+app.get('/', (req, res) => res.send('Pinnacle recharge backend running.'));
+
 const EKM_BASE = 'https://www.openapi.ekm365.com/api.ashx';
+const EKM_API = process.env.EKM_API || '1212'; // your assigned api= value from EKM (1212 is the doc placeholder)
 const txns = {}; // in-memory store; use Redis/Postgres in production
 
 // ────────────────────────────────────────────────
@@ -16,7 +33,7 @@ let ekmKey = null, ekmKeyTime = 0;
 async function ekmApiKey() {
   if (ekmKey && Date.now() - ekmKeyTime < 20 * 3600 * 1000) return ekmKey;
   const { data } = await axios.post(
-    `${EKM_BASE}?Method=login&api=1212`,
+    `${EKM_BASE}?Method=login&api=${EKM_API}`,
     { nam: process.env.EKM_USER, psw: process.env.EKM_PASS }
   );
   if (data.result !== '200') throw new Error('EKM login failed: ' + data.result);
@@ -27,7 +44,7 @@ async function ekmApiKey() {
 
 async function ekm(method, body) {
   const key = await ekmApiKey();
-  const url = `${EKM_BASE}?Method=${method}&api=1212&apikey=${encodeURIComponent(key)}`;
+  const url = `${EKM_BASE}?Method=${method}&api=${EKM_API}&apikey=${encodeURIComponent(key)}`;
   const { data } = await axios.post(url, { loginid: process.env.EKM_LOGINID, ...body });
   return data;
 }
