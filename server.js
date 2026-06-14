@@ -280,4 +280,33 @@ app.get('/api/_meters', async (req, res) => {
   }
 });
 
+// TEMPORARY DIAGNOSTIC — tries several sellByApi payload shapes to find which
+// one EKM accepts (5005 cause-finder). Visit:
+//   https://your-backend/api/_selltest?meter=19102387198
+// This creates a PENDING order only (sellByApi), not an actual charge, but if a
+// variant succeeds it WILL create a pending order in EKM — clean those up if
+// needed. REMOVE this before going live.
+app.get('/api/_selltest', async (req, res) => {
+  const meter = String(req.query.meter || '').replace(/\D/g, '');
+  if (!meter) return res.status(400).json({ error: 'pass ?meter=NUMBER' });
+  const amt = 50; // a safe round amount for the test
+  const variants = [
+    { label: 'strings, simple:2 (current)', body: { metid: meter, sellMoney: String(amt), simple: 2 } },
+    { label: 'numbers, simple:2',           body: { metid: Number(meter), sellMoney: amt, simple: 2 } },
+    { label: 'numbers, simple:0 + sellKwh', body: { metid: Number(meter), sellMoney: amt, sellKwh: 1, simple: 0 } },
+    { label: 'strings, simple:0 + sellKwh', body: { metid: meter, sellMoney: String(amt), sellKwh: '1', simple: 0 } },
+    { label: 'numbers + iswifi:1, simple:2', body: { metid: Number(meter), sellMoney: amt, simple: 2, iswifi: 1 } },
+  ];
+  const results = [];
+  for (const v of variants) {
+    try {
+      const r = await ekm('sellByApi', v.body);
+      results.push({ variant: v.label, sent: v.body, result: r.result, ok: isOk(r.result), idx: r.value && r.value.idx });
+    } catch (e) {
+      results.push({ variant: v.label, sent: v.body, error: e.message });
+    }
+  }
+  res.json({ meter, results });
+});
+
 app.listen(3000, () => { console.log('Pinnacle recharge backend on :3000'); checkTariff(); });
