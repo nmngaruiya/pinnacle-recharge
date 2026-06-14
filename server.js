@@ -109,22 +109,23 @@ async function liveRate() {
   return rateCache.value;
 }
 
-// Money-only vend with +1 retry (landlord cost) as a backstop.
-// simple:2 sends only money; EKM computes kWh from its stored rate, so there is
-// no kWh-rounding mismatch. The +1 bump exists only for the rare case the order
-// is still rejected, to nudge it through. The tenant's M-Pesa SMS WILL show the
-// bumped amount — it is only hidden in this app's own UI.
-async function sellWithRetry(meter, baseAmount, maxBumps = 3) {
+// Vend with reconciled money + kWh (simple:0), the format EKM accepts for these
+// meters. sellKwh = money / rate. EKM accepts fractional kWh. The +1 bump is a
+// backstop (landlord cost) for the rare case an order is still rejected; the
+// tenant's M-Pesa SMS WILL show the bumped amount — hidden only in this app's UI.
+async function sellWithRetry(meter, baseAmount, rate, maxBumps = 3) {
   let lastResult = null;
   for (let bump = 0; bump <= maxBumps; bump++) {
     const charged = Number(baseAmount) + bump;
-    // simple:2 = send sellMoney only (EKM computes kWh from the meter's stored
-    // price). NOTE: per the EKM manual, simple:1 means sellKwh-only and simple:2
-    // means sellMoney-only — so money-only must use 2.
-    const r = await ekm('sellByApi', { metid: meter, sellMoney: String(charged), simple: 2 });
-    if (isOk(r.result)) { r.chargedAmount = charged; if (bump) console.log(`Order ok after +${bump} bump → KES ${charged}`); return r; }
+    const kwh = Math.round((charged / rate) * 100) / 100; // money / rate, 2 dp
+    const r = await ekm('sellByApi', { metid: meter, sellMoney: charged, sellKwh: kwh, simple: 0 });
+    if (isOk(r.result)) {
+      r.chargedAmount = charged; r.kwh = kwh;
+      if (bump) console.log(`Order ok after +${bump} bump → KES ${charged}`);
+      return r;
+    }
     lastResult = r.result;
-    console.warn(`sellByApi rejected at KES ${charged} — EKM result: ${r.result} | full response:`, JSON.stringify(r));
+    console.warn(`sellByApi rejected at KES ${charged} (kwh ${kwh}) — EKM result: ${r.result} | full:`, JSON.stringify(r));
   }
   return { result: 'RETRY_EXHAUSTED', lastResult, chargedAmount: Number(baseAmount) + maxBumps };
 }
@@ -176,13 +177,34 @@ app.post('/api/stk-push', async (req, res) => {
     }
     console.log(`Meter ${meterClean} validated: name "${match.n}", status ${match.s}`);
 
-    // Money-only (simple:2): EKM computes kWh from its own stored rate.
-    // This avoids kWh-rounding rejection AND means the app always follows
-    // whatever rate is set in the EKM backend — no code change on rate updates.
-    const sell = await sellWithRetry(meterClean, amount);
+    // Resolve this meter's price (KES/kWh) so we can send a reconciled
+    // sellMoney + sellKwh pair. Try the per-meter status call first (has Price);
+    // fall back to the account's electricity price list.
+    let rate = null;
+    try {
+      const ms = await ekm('getMetStatusByMetId', { metid: meterClean });
+      if (ms && Number(ms.Price) > 0) rate = Number(ms.Price);
+    } catch (e) { /* fall through to list */ }
+    if (!rate) {
+      const pr = await ekm('getPrices', { ckv: '1', ptype: 1, offset: -1, limit: -1 });
+      if (isOk(pr.result) && pr.value && pr.value.length) {
+        // pick the electricity price; prefer the highest (your real tariff 31,
+        // not the leftover 1/2 test prices)
+        rate = Math.max(...pr.value.map(p => Number(p.Price)).filter(n => n > 0));
+      }
+    }
+    if (!rate || rate <= 0) {
+      console.warn(`Could not resolve rate for meter ${meterClean}`);
+      return res.status(500).json({ message: 'Could not determine the tariff. Please try again shortly.' });
+    }
+    console.log(`Meter ${meterClean} rate resolved: KES ${rate}/kWh`);
+
+    // Reconciled vend (simple:0): send both money and kWh = money / rate.
+    const sell = await sellWithRetry(meterClean, amount, rate);
     if (!isOk(sell.result)) throw new Error('EKM order failed: ' + (sell.lastResult ? `EKM code ${sell.lastResult}` : sell.result));
     const ekmIdx = sell.value.idx;
     const chargedAmount = sell.chargedAmount; // base amount + any landlord-cost retry bumps
+    const chargedKwh = sell.kwh;
 
     const token = await mpesaToken();
     const ts = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
@@ -201,7 +223,7 @@ app.post('/api/stk-push', async (req, res) => {
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
-    txns[data.CheckoutRequestID] = { status: 'PENDING', meter: meterClean, amount, chargedAmount, ekmIdx, taskIdx: null };
+    txns[data.CheckoutRequestID] = { status: 'PENDING', meter: meterClean, amount, chargedAmount, kwh: chargedKwh, ekmIdx, taskIdx: null };
     res.json({ checkoutRequestId: data.CheckoutRequestID });
   } catch (e) {
     res.status(500).json({ message: e.response?.data?.errorMessage || e.message });
