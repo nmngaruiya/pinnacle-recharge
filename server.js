@@ -111,13 +111,15 @@ async function liveRate() {
 // is still rejected, to nudge it through. The tenant's M-Pesa SMS WILL show the
 // bumped amount — it is only hidden in this app's own UI.
 async function sellWithRetry(meter, baseAmount, maxBumps = 3) {
+  let lastResult = null;
   for (let bump = 0; bump <= maxBumps; bump++) {
     const charged = Number(baseAmount) + bump;
     const r = await ekm('sellByApi', { metid: meter, sellMoney: String(charged), simple: 1 });
     if (isOk(r.result)) { r.chargedAmount = charged; if (bump) console.log(`Order ok after +${bump} bump → KES ${charged}`); return r; }
-    console.warn(`sellByApi rejected at KES ${charged} (result ${r.result}); retrying +1`);
+    lastResult = r.result;
+    console.warn(`sellByApi rejected at KES ${charged} — EKM result: ${r.result} | full response:`, JSON.stringify(r));
   }
-  return { result: 'RETRY_EXHAUSTED', chargedAmount: Number(baseAmount) + maxBumps };
+  return { result: 'RETRY_EXHAUSTED', lastResult, chargedAmount: Number(baseAmount) + maxBumps };
 }
 
 // ────────────────────────────────────────────────
@@ -145,12 +147,15 @@ async function mpesaToken() {
 app.post('/api/stk-push', async (req, res) => {
   const { meter, phone, amount } = req.body;
   if (!meter || !phone || !amount) return res.status(400).json({ message: 'Missing fields' });
+  // Clean the meter number: keep digits only (tenants may type spaces/dashes).
+  const meterClean = String(meter).replace(/\D/g, '');
+  console.log(`Recharge request — raw meter: "${meter}" → cleaned: "${meterClean}" | amount: ${amount}`);
   try {
     // Money-only (simple:1): EKM computes kWh from its own stored rate.
     // This avoids kWh-rounding rejection AND means the app always follows
     // whatever rate is set in the EKM backend — no code change on rate updates.
-    const sell = await sellWithRetry(meter, amount);
-    if (!isOk(sell.result)) throw new Error('EKM order failed: ' + sell.result);
+    const sell = await sellWithRetry(meterClean, amount);
+    if (!isOk(sell.result)) throw new Error('EKM order failed: ' + (sell.lastResult ? `EKM code ${sell.lastResult}` : sell.result));
     const ekmIdx = sell.value.idx;
     const chargedAmount = sell.chargedAmount; // base amount + any landlord-cost retry bumps
 
@@ -166,12 +171,12 @@ app.post('/api/stk-push', async (req, res) => {
         Amount: chargedAmount, PartyA: phone, PartyB: process.env.SHORTCODE,
         PhoneNumber: phone,
         CallBackURL: `${process.env.BASE_URL}/api/mpesa-callback`,
-        AccountReference: meter, TransactionDesc: 'Electricity units'
+        AccountReference: meterClean, TransactionDesc: 'Electricity units'
       },
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
-    txns[data.CheckoutRequestID] = { status: 'PENDING', meter, amount, chargedAmount, ekmIdx, taskIdx: null };
+    txns[data.CheckoutRequestID] = { status: 'PENDING', meter: meterClean, amount, chargedAmount, ekmIdx, taskIdx: null };
     res.json({ checkoutRequestId: data.CheckoutRequestID });
   } catch (e) {
     res.status(500).json({ message: e.response?.data?.errorMessage || e.message });
