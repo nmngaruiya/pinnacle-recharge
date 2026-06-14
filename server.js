@@ -57,7 +57,7 @@ function encryptApiKey(rawKey) {
 // ────────────────────────────────────────────────
 // EKM365 auth: apiKey valid 24h, refresh at 20h
 // ────────────────────────────────────────────────
-let ekmKey = null, ekmKeyTime = 0;
+let ekmKey = null, ekmKeyTime = 0, ekmLoginId = null;
 async function ekmApiKey() {
   if (ekmKey && Date.now() - ekmKeyTime < 20 * 3600 * 1000) return ekmKey;
   const { data } = await axios.post(
@@ -66,6 +66,9 @@ async function ekmApiKey() {
   );
   if (!isOk(data.result)) throw new Error('EKM login failed: ' + data.result);
   ekmKey = data.value.apiKey;
+  // Use the exact LoginID EKM returns, not what we typed — avoids 5004 mismatch.
+  ekmLoginId = data.value.LoginID || process.env.EKM_LOGINID;
+  console.log('EKM login OK. LoginID from EKM:', ekmLoginId, '| AccType:', data.value.AccType);
   ekmKeyTime = Date.now();
   return ekmKey;
 }
@@ -74,7 +77,7 @@ async function ekm(method, body) {
   const key = await ekmApiKey();
   const encKey = encryptApiKey(key);
   const url = `${EKM_BASE}?Method=${method}&api=${EKM_API}&apikey=${encodeURIComponent(encKey)}`;
-  const { data } = await axios.post(url, { loginid: process.env.EKM_LOGINID, ...body });
+  const { data } = await axios.post(url, { loginid: ekmLoginId, ...body });
   return data;
 }
 
