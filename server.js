@@ -26,6 +26,10 @@ const EKM_BASE = 'https://www.openapi.ekm365.com/api.ashx';
 const EKM_API = process.env.EKM_API || '1212'; // your assigned api= value from EKM (1212 is the doc placeholder)
 const txns = {}; // in-memory store; use Redis/Postgres in production
 
+// EKM returns result as either the number 200 or the string "200" depending on
+// the call. Treat both as success.
+const isOk = (r) => String(r) === '200';
+
 // ────────────────────────────────────────────────
 // EKM365 auth: apiKey valid 24h, refresh at 20h
 // ────────────────────────────────────────────────
@@ -36,7 +40,7 @@ async function ekmApiKey() {
     `${EKM_BASE}?Method=login&api=${EKM_API}`,
     { nam: process.env.EKM_USER, psw: process.env.EKM_PASS }
   );
-  if (data.result !== '200') throw new Error('EKM login failed: ' + data.result);
+  if (!isOk(data.result)) throw new Error('EKM login failed: ' + data.result);
   ekmKey = data.value.apiKey;
   ekmKeyTime = Date.now();
   return ekmKey;
@@ -55,7 +59,7 @@ async function ekm(method, body) {
 async function checkTariff() {
   try {
     const r = await ekm('getPrices', { ckv: '1', ptype: 1, offset: -1, limit: -1 });
-    if (r.result !== '200') { console.warn('getPrices failed:', r.result); return; }
+    if (!isOk(r.result)) { console.warn('getPrices failed:', r.result); return; }
     const prices = (r.value || []).map(p => p.Price);
     console.log(`EKM electricity prices currently set: [${prices.join(', ')}]`);
   } catch (e) { console.warn('Tariff check error:', e.message); }
@@ -67,7 +71,7 @@ let rateCache = { value: null, time: 0 };
 async function liveRate() {
   if (rateCache.value && Date.now() - rateCache.time < 10 * 60 * 1000) return rateCache.value;
   const r = await ekm('getPrices', { ckv: '1', ptype: 1, offset: -1, limit: -1 });
-  if (r.result === '200' && r.value && r.value.length) {
+  if (isOk(r.result) && r.value && r.value.length) {
     rateCache = { value: r.value[0].Price, time: Date.now() }; // first electricity price
   }
   return rateCache.value;
@@ -82,7 +86,7 @@ async function sellWithRetry(meter, baseAmount, maxBumps = 3) {
   for (let bump = 0; bump <= maxBumps; bump++) {
     const charged = Number(baseAmount) + bump;
     const r = await ekm('sellByApi', { metid: meter, sellMoney: String(charged), simple: 1 });
-    if (r.result === '200') { r.chargedAmount = charged; if (bump) console.log(`Order ok after +${bump} bump → KES ${charged}`); return r; }
+    if (isOk(r.result)) { r.chargedAmount = charged; if (bump) console.log(`Order ok after +${bump} bump → KES ${charged}`); return r; }
     console.warn(`sellByApi rejected at KES ${charged} (result ${r.result}); retrying +1`);
   }
   return { result: 'RETRY_EXHAUSTED', chargedAmount: Number(baseAmount) + maxBumps };
@@ -111,7 +115,7 @@ app.post('/api/stk-push', async (req, res) => {
     // This avoids kWh-rounding rejection AND means the app always follows
     // whatever rate is set in the EKM backend — no code change on rate updates.
     const sell = await sellWithRetry(meter, amount);
-    if (sell.result !== '200') throw new Error('EKM order failed: ' + sell.result);
+    if (!isOk(sell.result)) throw new Error('EKM order failed: ' + sell.result);
     const ekmIdx = sell.value.idx;
     const chargedAmount = sell.chargedAmount; // base amount + any landlord-cost retry bumps
 
@@ -153,7 +157,7 @@ app.post('/api/mpesa-callback', async (req, res) => {
 
   try {
     const ok = await ekm('sellByApiOk', { idx: String(t.ekmIdx), metid: t.meter });
-    if (ok.result !== '200') throw new Error('EKM confirm failed: ' + ok.result);
+    if (!isOk(ok.result)) throw new Error('EKM confirm failed: ' + ok.result);
     // sellByApiOk may return a task idx we can poll via getTkSta
     t.taskIdx = ok.value?.idx || t.ekmIdx;
     t.status = 'CONFIRMING'; // not done until meter acknowledges

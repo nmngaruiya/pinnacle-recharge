@@ -104,9 +104,9 @@ input::placeholder{color:#3d6657}
         <div class="chip" onclick="setAmt(2000)">2,000</div>
         <div class="chip" onclick="setAmt(5000)">5,000</div>
       </div>
-      <div class="units">
+      <div class="units" id="unitsBlock" style="display:none">
         <div class="big" id="units">0.0</div>
-        <div class="sub">estimated kWh · KES <span id="rate">25.00</span>/unit</div>
+        <div class="sub">estimated kWh · KES <span id="rate">–</span>/unit</div>
       </div>
     </div>
 
@@ -130,22 +130,36 @@ input::placeholder{color:#3d6657}
 const API = "https://pinnacle-recharge.onrender.com";
 
 let amount = 0;
-let RATE = 31.00; // fallback until live rate loads from EKM via backend
+let RATE = null; // unknown until the live rate loads from EKM via backend
 
-// Pull the current rate from the backend (which reads it from EKM).
+// Pull the current rate from the backend (which reads it live from EKM).
 // Change the rate in EKM and this updates on its own — no app change.
+// If the fetch fails, we leave RATE null and simply DON'T show an estimate,
+// rather than display a possibly-wrong number. Billing is unaffected either
+// way: the meter is always charged at the EKM rate, not this preview.
 (async()=>{
   try{
     const r=await fetch(API+'/api/rate');
     const d=await r.json();
-    if(d.rate){ RATE=d.rate; document.getElementById('rate').textContent=RATE.toFixed(2); refresh(); }
-  }catch(e){/* keep fallback */}
+    if(d.rate){
+      RATE=d.rate;
+      document.getElementById('rate').textContent=RATE.toFixed(2);
+      refresh();
+    }
+  }catch(e){/* leave estimate hidden */}
 })();
-document.getElementById('rate').textContent = RATE.toFixed(2);
 
 function onAmount(){ amount = parseInt(document.getElementById('amount').value||0); refresh(); document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active')); }
 function setAmt(v){ amount=v; document.getElementById('amount').value=v; refresh(); document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', +c.textContent.replace(/,/g,'')===v)); }
-function refresh(){ document.getElementById('units').textContent = (amount/RATE).toFixed(1); }
+function refresh(){
+  const block=document.getElementById('unitsBlock');
+  if(RATE && amount>0){
+    document.getElementById('units').textContent=(amount/RATE).toFixed(1);
+    block.style.display='block';
+  } else {
+    block.style.display='none';
+  }
+}
 
 function show(type,title,msg){
   document.getElementById('form').style.display='none';
@@ -207,7 +221,11 @@ async function poll(id,tries=0){
     if(d.status==='SUCCESS'){
       show('ok','Recharge sent','Payment received. Units have been sent directly to your meter — no token to enter.');
       const tb=document.getElementById('tokenBox');
-      tb.style.display='block'; tb.textContent=(amount/RATE).toFixed(1)+' kWh credited';
+      let credited;
+      if(d.kwh){ credited=d.kwh+' kWh credited'; }
+      else if(RATE){ credited=(amount/RATE).toFixed(1)+' kWh credited'; }
+      else { credited='KES '+amount+' credited'; }
+      tb.style.display='block'; tb.textContent=credited;
       document.getElementById('againBtn').style.display='inline-block';
       return;
     }
