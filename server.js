@@ -290,12 +290,13 @@ app.get('/api/_selltest', async (req, res) => {
   const meter = String(req.query.meter || '').replace(/\D/g, '');
   if (!meter) return res.status(400).json({ error: 'pass ?meter=NUMBER' });
   const amt = 50; // a safe round amount for the test
+  // Variants that send reconciled money+kWh at common prices, plus a few shapes.
   const variants = [
-    { label: 'strings, simple:2 (current)', body: { metid: meter, sellMoney: String(amt), simple: 2 } },
-    { label: 'numbers, simple:2',           body: { metid: Number(meter), sellMoney: amt, simple: 2 } },
-    { label: 'numbers, simple:0 + sellKwh', body: { metid: Number(meter), sellMoney: amt, sellKwh: 1, simple: 0 } },
-    { label: 'strings, simple:0 + sellKwh', body: { metid: meter, sellMoney: String(amt), sellKwh: '1', simple: 0 } },
-    { label: 'numbers + iswifi:1, simple:2', body: { metid: Number(meter), sellMoney: amt, simple: 2, iswifi: 1 } },
+    { label: 'simple:0, money=62 kwh=2 @31',  body: { metid: meter, sellMoney: 62, sellKwh: 2, simple: 0 } },
+    { label: 'simple:0, money=31 kwh=1 @31',  body: { metid: meter, sellMoney: 31, sellKwh: 1, simple: 0 } },
+    { label: 'simple:1, kwh-only=2',          body: { metid: meter, sellKwh: 2, simple: 1 } },
+    { label: 'simple:0 numbers money=50 kwh=1.6', body: { metid: Number(meter), sellMoney: 50, sellKwh: 1.6, simple: 0 } },
+    { label: 'simple:0 strings money=50 kwh=1.6', body: { metid: meter, sellMoney: '50', sellKwh: '1.6', simple: 0 } },
   ];
   const results = [];
   for (const v of variants) {
