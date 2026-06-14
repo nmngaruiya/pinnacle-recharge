@@ -77,7 +77,11 @@ async function ekm(method, body) {
   const key = await ekmApiKey();
   const encKey = encryptApiKey(key);
   const url = `${EKM_BASE}?Method=${method}&api=${EKM_API}&apikey=${encodeURIComponent(encKey)}`;
-  const { data } = await axios.post(url, { loginid: ekmLoginId, ...body });
+  const payload = { loginid: ekmLoginId, ...body };
+  if (method === 'sellByApi' || method === 'sellByApiOk') {
+    console.log(`→ ${method} body:`, JSON.stringify(payload));
+  }
+  const { data } = await axios.post(url, payload);
   return data;
 }
 
@@ -106,7 +110,7 @@ async function liveRate() {
 }
 
 // Money-only vend with +1 retry (landlord cost) as a backstop.
-// simple:1 sends only money; EKM computes kWh from its stored rate, so there is
+// simple:2 sends only money; EKM computes kWh from its stored rate, so there is
 // no kWh-rounding mismatch. The +1 bump exists only for the rare case the order
 // is still rejected, to nudge it through. The tenant's M-Pesa SMS WILL show the
 // bumped amount — it is only hidden in this app's own UI.
@@ -114,7 +118,10 @@ async function sellWithRetry(meter, baseAmount, maxBumps = 3) {
   let lastResult = null;
   for (let bump = 0; bump <= maxBumps; bump++) {
     const charged = Number(baseAmount) + bump;
-    const r = await ekm('sellByApi', { metid: meter, sellMoney: String(charged), simple: 1 });
+    // simple:2 = send sellMoney only (EKM computes kWh from the meter's stored
+    // price). NOTE: per the EKM manual, simple:1 means sellKwh-only and simple:2
+    // means sellMoney-only — so money-only must use 2.
+    const r = await ekm('sellByApi', { metid: meter, sellMoney: String(charged), simple: 2 });
     if (isOk(r.result)) { r.chargedAmount = charged; if (bump) console.log(`Order ok after +${bump} bump → KES ${charged}`); return r; }
     lastResult = r.result;
     console.warn(`sellByApi rejected at KES ${charged} — EKM result: ${r.result} | full response:`, JSON.stringify(r));
@@ -151,7 +158,22 @@ app.post('/api/stk-push', async (req, res) => {
   const meterClean = String(meter).replace(/\D/g, '');
   console.log(`Recharge request — raw meter: "${meter}" → cleaned: "${meterClean}" | amount: ${amount}`);
   try {
-    // Money-only (simple:1): EKM computes kWh from its own stored rate.
+    // ── Validate the meter BEFORE creating an order or prompting for payment ──
+    // Avoids charging a tenant who mistyped their meter number.
+    const meterCheck = await ekm('getMetStatusByMetId', { metid: meterClean });
+    if (!isOk(meterCheck.result) || !meterCheck.MeterID) {
+      console.warn(`Meter validation failed for ${meterClean}: result ${meterCheck.result}`);
+      return res.status(400).json({ message: 'Meter number not found. Please check and try again.' });
+    }
+    // Status: 1 offline-table, 2 offline, 3 online powered-on, 4 online powered-off.
+    // Offline meters can't receive the recharge, so don't take payment.
+    const st = meterCheck.T_Status;
+    if (st === 1 || st === 2) {
+      console.warn(`Meter ${meterClean} is offline (status ${st})`);
+      return res.status(400).json({ message: 'This meter is currently offline. Please try again shortly or contact support.' });
+    }
+
+    // Money-only (simple:2): EKM computes kWh from its own stored rate.
     // This avoids kWh-rounding rejection AND means the app always follows
     // whatever rate is set in the EKM backend — no code change on rate updates.
     const sell = await sellWithRetry(meterClean, amount);
