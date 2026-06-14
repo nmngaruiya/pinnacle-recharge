@@ -288,48 +288,4 @@ app.get('/api/rate', async (req, res) => {
   catch (e) { res.status(500).json({ rate: null }); }
 });
 
-// TEMPORARY DIAGNOSTIC — lists the meters EKM thinks this account owns.
-// Visit https://your-backend/api/_meters in a browser to check whether your
-// test meter number actually appears. REMOVE this before going live.
-app.get('/api/_meters', async (req, res) => {
-  try {
-    const r = await ekm('getMetList_Simple', { ckv: '', mt: 1, offset: -1, limit: -1 });
-    // d[].i = meter number, d[].n = name, d[].c = price auto-increment serial
-    const meters = (r.value && r.value.d) ? r.value.d.map(m => ({ number: m.i, name: m.n, priceSerial: m.c, status: m.s })) : [];
-    res.json({ result: r.result, count: meters.length, meters });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// TEMPORARY DIAGNOSTIC — tries several sellByApi payload shapes to find which
-// one EKM accepts (5005 cause-finder). Visit:
-//   https://your-backend/api/_selltest?meter=19102387198
-// This creates a PENDING order only (sellByApi), not an actual charge, but if a
-// variant succeeds it WILL create a pending order in EKM — clean those up if
-// needed. REMOVE this before going live.
-app.get('/api/_selltest', async (req, res) => {
-  const meter = String(req.query.meter || '').replace(/\D/g, '');
-  if (!meter) return res.status(400).json({ error: 'pass ?meter=NUMBER' });
-  const amt = 50; // a safe round amount for the test
-  // Variants that send reconciled money+kWh at common prices, plus a few shapes.
-  const variants = [
-    { label: 'simple:0, money=62 kwh=2 @31',  body: { metid: meter, sellMoney: 62, sellKwh: 2, simple: 0 } },
-    { label: 'simple:0, money=31 kwh=1 @31',  body: { metid: meter, sellMoney: 31, sellKwh: 1, simple: 0 } },
-    { label: 'simple:1, kwh-only=2',          body: { metid: meter, sellKwh: 2, simple: 1 } },
-    { label: 'simple:0 numbers money=50 kwh=1.6', body: { metid: Number(meter), sellMoney: 50, sellKwh: 1.6, simple: 0 } },
-    { label: 'simple:0 strings money=50 kwh=1.6', body: { metid: meter, sellMoney: '50', sellKwh: '1.6', simple: 0 } },
-  ];
-  const results = [];
-  for (const v of variants) {
-    try {
-      const r = await ekm('sellByApi', v.body);
-      results.push({ variant: v.label, sent: v.body, result: r.result, ok: isOk(r.result), idx: r.value && r.value.idx });
-    } catch (e) {
-      results.push({ variant: v.label, sent: v.body, error: e.message });
-    }
-  }
-  res.json({ meter, results });
-});
-
 app.listen(3000, () => { console.log('Pinnacle recharge backend on :3000'); checkTariff(); });
