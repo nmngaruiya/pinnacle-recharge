@@ -160,18 +160,21 @@ app.post('/api/stk-push', async (req, res) => {
   try {
     // ── Validate the meter BEFORE creating an order or prompting for payment ──
     // Avoids charging a tenant who mistyped their meter number.
-    const meterCheck = await ekm('getMetStatusByMetId', { metid: meterClean });
-    if (!isOk(meterCheck.result) || !meterCheck.MeterID) {
-      console.warn(`Meter validation failed for ${meterClean}: result ${meterCheck.result}`);
+    // We validate against getMetList_Simple, the same call /api/_meters uses
+    // (proven to return this account's meters reliably).
+    const list = await ekm('getMetList_Simple', { ckv: '', mt: 1, offset: -1, limit: -1 });
+    const meters = (list.value && list.value.d) ? list.value.d : [];
+    const match = meters.find(m => String(m.i) === meterClean);
+    if (!match) {
+      console.warn(`Meter ${meterClean} not in account list (list returned ${meters.length} meters, result ${list.result})`);
       return res.status(400).json({ message: 'Meter number not found. Please check and try again.' });
     }
-    // Status: 1 offline-table, 2 offline, 3 online powered-on, 4 online powered-off.
-    // Offline meters can't receive the recharge, so don't take payment.
-    const st = meterCheck.T_Status;
-    if (st === 1 || st === 2) {
-      console.warn(`Meter ${meterClean} is offline (status ${st})`);
+    // m.s status: 1 offline-table, 2 offline, 3 online powered-on, 4 online powered-off.
+    if (match.s === 1 || match.s === 2) {
+      console.warn(`Meter ${meterClean} is offline (status ${match.s})`);
       return res.status(400).json({ message: 'This meter is currently offline. Please try again shortly or contact support.' });
     }
+    console.log(`Meter ${meterClean} validated: name "${match.n}", status ${match.s}`);
 
     // Money-only (simple:2): EKM computes kWh from its own stored rate.
     // This avoids kWh-rounding rejection AND means the app always follows
