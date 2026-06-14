@@ -3,6 +3,7 @@
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
+const crypto = require('crypto');
 const app = express();
 app.use(express.json());
 
@@ -24,11 +25,34 @@ app.get('/', (req, res) => res.send('Pinnacle recharge backend running.'));
 
 const EKM_BASE = 'https://www.openapi.ekm365.com/api.ashx';
 const EKM_API = process.env.EKM_API || '1212'; // your assigned api= value from EKM (1212 is the doc placeholder)
+const EKM_AES_KEY = process.env.EKM_AES_KEY || ''; // the 32-char Token from EKM, used to AES-encrypt the apikey
 const txns = {}; // in-memory store; use Redis/Postgres in production
 
 // EKM returns result as either the number 200 or the string "200" depending on
 // the call. Treat both as success.
 const isOk = (r) => String(r) === '200';
+
+// ────────────────────────────────────────────────
+// AES-encrypt the apikey before putting it in the URL.
+// Per the EKM manual: apikey from login → AES encrypt → URL-encode → use.
+// Settings from EKM's tool screenshot: ECB mode, PKCS7 padding, Base64 output.
+// Node's 'aes-256-ecb' expects a 32-byte key (the 32-char token as raw bytes)
+// and applies PKCS7 padding by default. If 5002 persists, try aes-128-ecb with
+// the first 16 chars (set EKM_AES_BITS=128).
+// ────────────────────────────────────────────────
+function encryptApiKey(rawKey) {
+  if (!EKM_AES_KEY) return rawKey; // no token set → send raw (will 5002, but keeps server alive)
+  const bits = process.env.EKM_AES_BITS || '256';
+  const keyBytes = bits === '128'
+    ? Buffer.from(EKM_AES_KEY.slice(0, 16), 'utf8')
+    : Buffer.from(EKM_AES_KEY, 'utf8');
+  const algo = bits === '128' ? 'aes-128-ecb' : 'aes-256-ecb';
+  const cipher = crypto.createCipheriv(algo, keyBytes, null); // ECB has no IV
+  cipher.setAutoPadding(true); // PKCS7
+  let enc = cipher.update(rawKey, 'utf8', 'base64');
+  enc += cipher.final('base64');
+  return enc;
+}
 
 // ────────────────────────────────────────────────
 // EKM365 auth: apiKey valid 24h, refresh at 20h
@@ -48,7 +72,8 @@ async function ekmApiKey() {
 
 async function ekm(method, body) {
   const key = await ekmApiKey();
-  const url = `${EKM_BASE}?Method=${method}&api=${EKM_API}&apikey=${encodeURIComponent(key)}`;
+  const encKey = encryptApiKey(key);
+  const url = `${EKM_BASE}?Method=${method}&api=${EKM_API}&apikey=${encodeURIComponent(encKey)}`;
   const { data } = await axios.post(url, { loginid: process.env.EKM_LOGINID, ...body });
   return data;
 }
