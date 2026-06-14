@@ -241,4 +241,18 @@ app.get('/api/rate', async (req, res) => {
   catch (e) { res.status(500).json({ rate: null }); }
 });
 
+// TEMPORARY DIAGNOSTIC — lists the meters EKM thinks this account owns.
+// Visit https://your-backend/api/_meters in a browser to check whether your
+// test meter number actually appears. REMOVE this before going live.
+app.get('/api/_meters', async (req, res) => {
+  try {
+    const r = await ekm('getMetList_Simple', { ckv: '', mt: 1, offset: -1, limit: -1 });
+    // d[].i = meter number, d[].n = name, d[].c = price auto-increment serial
+    const meters = (r.value && r.value.d) ? r.value.d.map(m => ({ number: m.i, name: m.n, priceSerial: m.c, status: m.s })) : [];
+    res.json({ result: r.result, count: meters.length, meters });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.listen(3000, () => { console.log('Pinnacle recharge backend on :3000'); checkTariff(); });

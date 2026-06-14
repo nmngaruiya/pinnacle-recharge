@@ -41,10 +41,6 @@ input::placeholder{color:#3d6657}
 .chip{background:#0a241b;border:1.5px solid var(--line);border-radius:12px;padding:13px 0;text-align:center;font-family:'Space Mono',monospace;font-weight:700;font-size:15px;cursor:pointer;transition:all .15s}
 .chip.active{border-color:var(--green-bright);background:rgba(61,220,132,.12);color:var(--green-bright)}
 
-.units{text-align:center;padding:8px 0 2px}
-.units .big{font-family:'Space Mono',monospace;font-size:34px;font-weight:700;color:var(--green-bright)}
-.units .sub{font-size:12px;color:var(--muted);margin-top:2px}
-
 .pay{
   width:100%;border:none;border-radius:15px;padding:17px;margin-top:8px;
   background:linear-gradient(135deg,var(--green),var(--green-bright));color:#04150f;
@@ -104,10 +100,6 @@ input::placeholder{color:#3d6657}
         <div class="chip" onclick="setAmt(2000)">2,000</div>
         <div class="chip" onclick="setAmt(5000)">5,000</div>
       </div>
-      <div class="units" id="unitsBlock" style="display:none">
-        <div class="big" id="units">0.0</div>
-        <div class="sub">estimated kWh · KES <span id="rate">–</span>/unit</div>
-      </div>
     </div>
 
     <button class="pay" id="payBtn" onclick="pay()">Pay with M-Pesa</button>
@@ -130,36 +122,9 @@ input::placeholder{color:#3d6657}
 const API = "https://pinnacle-recharge.onrender.com";
 
 let amount = 0;
-let RATE = null; // unknown until the live rate loads from EKM via backend
 
-// Pull the current rate from the backend (which reads it live from EKM).
-// Change the rate in EKM and this updates on its own — no app change.
-// If the fetch fails, we leave RATE null and simply DON'T show an estimate,
-// rather than display a possibly-wrong number. Billing is unaffected either
-// way: the meter is always charged at the EKM rate, not this preview.
-(async()=>{
-  try{
-    const r=await fetch(API+'/api/rate');
-    const d=await r.json();
-    if(d.rate){
-      RATE=d.rate;
-      document.getElementById('rate').textContent=RATE.toFixed(2);
-      refresh();
-    }
-  }catch(e){/* leave estimate hidden */}
-})();
-
-function onAmount(){ amount = parseInt(document.getElementById('amount').value||0); refresh(); document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active')); }
-function setAmt(v){ amount=v; document.getElementById('amount').value=v; refresh(); document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', +c.textContent.replace(/,/g,'')===v)); }
-function refresh(){
-  const block=document.getElementById('unitsBlock');
-  if(RATE && amount>0){
-    document.getElementById('units').textContent=(amount/RATE).toFixed(1);
-    block.style.display='block';
-  } else {
-    block.style.display='none';
-  }
-}
+function onAmount(){ amount = parseInt(document.getElementById('amount').value||0); document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active')); }
+function setAmt(v){ amount=v; document.getElementById('amount').value=v; document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', +c.textContent.replace(/,/g,'')===v)); }
 
 function show(type,title,msg){
   document.getElementById('form').style.display='none';
@@ -223,7 +188,6 @@ async function poll(id,tries=0){
       const tb=document.getElementById('tokenBox');
       let credited;
       if(d.kwh){ credited=d.kwh+' kWh credited'; }
-      else if(RATE){ credited=(amount/RATE).toFixed(1)+' kWh credited'; }
       else { credited='KES '+amount+' credited'; }
       tb.style.display='block'; tb.textContent=credited;
       document.getElementById('againBtn').style.display='inline-block';
