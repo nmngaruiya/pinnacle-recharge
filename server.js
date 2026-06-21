@@ -334,18 +334,6 @@ function buildWeeklyReport() {
 }
 
 // Weekly digest: Mondays 04:00 UTC (07:00 EAT).
-// TEMPORARY — test that email works. Visit:
-//   https://pinnacle-recharge.onrender.com/api/_testmail?key=YOURSECRET
-// Set TEST_KEY in Render to any password you choose; pass it as ?key=...
-// Sends the weekly report to ALERT_EMAIL right now. REMOVE once confirmed.
-app.get('/api/_testmail', async (req, res) => {
-  if (!process.env.TEST_KEY || req.query.key !== process.env.TEST_KEY) {
-    return res.status(403).json({ message: 'Forbidden' });
-  }
-  await sendEmail('Pinnacle Recharge - TEST email', buildWeeklyReport());
-  res.json({ sent: true, to: process.env.ALERT_EMAIL || '(ALERT_EMAIL not set)', note: 'Check your inbox and the Render logs.' });
-});
-
 cron.schedule('0 4 * * 1', () => { sendEmail('Pinnacle Recharge - Weekly Report', buildWeeklyReport()); });
 
 app.listen(3000, () => { console.log('Pinnacle recharge backend on :3000'); checkTariff(); });
