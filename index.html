@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>EKM365 · Buy Tokens</title>
+<title>The Bounty Suites · Electricity</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -20,10 +20,15 @@ body{
   background-image:radial-gradient(circle at 20% 0%,#12382c 0%,transparent 45%),radial-gradient(circle at 90% 100%,#0d3326 0%,transparent 40%);
 }
 .app{width:100%;max-width:440px;min-height:100vh;display:flex;flex-direction:column;padding:24px 20px 32px}
-.brand{display:flex;align-items:center;gap:10px;margin-bottom:28px}
-.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--green),var(--green-bright));display:flex;align-items:center;justify-content:center;font-weight:800;color:#04150f;font-size:18px}
-.brand h1{font-size:17px;font-weight:700;letter-spacing:-.3px}
-.brand span{display:block;font-size:11px;color:var(--muted);font-weight:400;letter-spacing:1px;text-transform:uppercase}
+.brand{display:flex;align-items:center;gap:11px;margin-bottom:22px}
+.logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--green),var(--green-bright));display:flex;align-items:center;justify-content:center;font-weight:800;color:#04150f;font-size:16px;letter-spacing:-.5px}
+.brand h1{font-size:18px;font-weight:700;letter-spacing:-.3px;line-height:1.1}
+.brand span{display:block;font-size:10.5px;color:var(--muted);font-weight:400;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
+
+/* Tabs */
+.tabs{display:flex;gap:8px;margin-bottom:18px;background:#0a241b;border:1px solid var(--line);border-radius:14px;padding:5px}
+.tab{flex:1;text-align:center;padding:11px 0;border-radius:10px;font-size:13.5px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s}
+.tab.active{background:linear-gradient(135deg,var(--green),var(--green-bright));color:#04150f}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:22px;margin-bottom:16px}
 .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:9px;display:block}
@@ -41,14 +46,14 @@ input::placeholder{color:#3d6657}
 .chip{background:#0a241b;border:1.5px solid var(--line);border-radius:12px;padding:13px 0;text-align:center;font-family:'Space Mono',monospace;font-weight:700;font-size:15px;cursor:pointer;transition:all .15s}
 .chip.active{border-color:var(--green-bright);background:rgba(61,220,132,.12);color:var(--green-bright)}
 
-.pay{
+.btn{
   width:100%;border:none;border-radius:15px;padding:17px;margin-top:8px;
   background:linear-gradient(135deg,var(--green),var(--green-bright));color:#04150f;
   font-family:'Sora';font-weight:800;font-size:16px;cursor:pointer;letter-spacing:.2px;
   transition:transform .12s,opacity .2s;display:flex;align-items:center;justify-content:center;gap:9px;
 }
-.pay:active{transform:scale(.98)}
-.pay:disabled{opacity:.5;cursor:not-allowed}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
 
 .note{font-size:11.5px;color:var(--muted);text-align:center;margin-top:16px;line-height:1.6}
 .spinner{width:18px;height:18px;border:2.5px solid #04150f55;border-top-color:#04150f;border-radius:50%;animation:spin .7s linear infinite}
@@ -65,21 +70,34 @@ input::placeholder{color:#3d6657}
 .status p{font-size:13.5px;color:var(--muted);line-height:1.6}
 .token{font-family:'Space Mono',monospace;font-size:22px;font-weight:700;letter-spacing:2px;color:var(--green-bright);background:#0a241b;border:1px dashed var(--line);border-radius:13px;padding:16px;margin:18px 0;word-break:break-all}
 .again{background:transparent;border:1.5px solid var(--line);color:var(--text);border-radius:13px;padding:13px 26px;font-family:'Sora';font-weight:600;cursor:pointer;margin-top:6px}
+
+/* Balance result */
+.balwrap{text-align:center;padding:10px 0 4px}
+.balwrap .big{font-family:'Space Mono',monospace;font-size:40px;font-weight:700;color:var(--green-bright);line-height:1}
+.balwrap .unit{font-size:13px;color:var(--muted);margin-top:6px}
+.balwrap .mname{font-size:13px;color:var(--text);margin-top:10px}
+.offline{color:var(--amber);font-size:12.5px;margin-top:8px}
+.foot{margin-top:auto;text-align:center;font-size:10.5px;color:#3d6657;letter-spacing:.5px;padding-top:20px}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="brand">
-    <div class="logo">E</div>
-    <div><h1>EKM365 Tokens<span>Smart Meter Recharge</span></h1></div>
+    <div class="logo">TBS</div>
+    <div><h1>The Bounty Suites<span>Electricity Recharge</span></h1></div>
   </div>
 
-  <!-- FORM -->
-  <div id="form">
+  <div class="tabs">
+    <div class="tab active" id="tabBuy" onclick="switchTab('buy')">Buy Units</div>
+    <div class="tab" id="tabBal" onclick="switchTab('bal')">Check Balance</div>
+  </div>
+
+  <!-- BUY FORM -->
+  <div id="buyView">
     <div class="card">
       <div class="field">
         <label class="label">Meter Number</label>
-        <input id="meter" inputmode="numeric" placeholder="e.g. 04123456789" autocomplete="off">
+        <input id="meter" inputmode="numeric" placeholder="e.g. 19102387198" autocomplete="off">
       </div>
       <div class="field">
         <label class="label">M-Pesa Phone</label>
@@ -102,43 +120,74 @@ input::placeholder{color:#3d6657}
       </div>
     </div>
 
-    <button class="pay" id="payBtn" onclick="pay()">Pay with M-Pesa</button>
-    <p class="note">You'll receive an STK push prompt on your phone. Enter your M-Pesa PIN to confirm. Units are credited automatically to your smart meter on payment.</p>
+    <button class="btn" id="payBtn" onclick="pay()">Pay with M-Pesa</button>
+    <p class="note">You'll receive an M-Pesa prompt on your phone. Enter your PIN to confirm. Units are credited automatically to your meter on payment.</p>
   </div>
 
-  <!-- STATUS -->
+  <!-- BALANCE VIEW -->
+  <div id="balView" style="display:none">
+    <div class="card">
+      <div class="field">
+        <label class="label">Meter Number</label>
+        <input id="balMeter" inputmode="numeric" placeholder="e.g. 19102387198" autocomplete="off">
+      </div>
+    </div>
+    <button class="btn" id="balBtn" onclick="checkBalance()">Check Balance</button>
+    <div class="card" id="balResult" style="display:none;margin-top:16px">
+      <div class="balwrap">
+        <div class="big" id="balKwh">–</div>
+        <div class="unit">kWh remaining</div>
+        <div class="mname" id="balName"></div>
+        <div class="offline" id="balOffline" style="display:none">Meter is currently offline</div>
+      </div>
+    </div>
+    <p class="note">Enter your meter number to see the units currently on your meter.</p>
+  </div>
+
+  <!-- STATUS (shared) -->
   <div class="card status" id="status">
     <div class="ring" id="ring"></div>
     <h2 id="stTitle"></h2>
     <p id="stMsg"></p>
     <div class="token" id="tokenBox" style="display:none"></div>
-    <button class="again" id="againBtn" style="display:none" onclick="reset()">Buy Again</button>
+    <button class="again" id="againBtn" style="display:none" onclick="resetView()">Done</button>
   </div>
+
+  <div class="foot">THE BOUNTY SUITES · Powered by M-Pesa</div>
 </div>
 
 <script>
 // ── CONFIG ──────────────────────────────────────────────
-// Point this at YOUR backend (see server code in chat). Never put M-Pesa/EKM secrets here.
+// Backend URL. Never put payment or meter-system secrets here.
 const API = "https://pinnacle-recharge.onrender.com";
 
 let amount = 0;
+
+function switchTab(which){
+  document.getElementById('tabBuy').classList.toggle('active', which==='buy');
+  document.getElementById('tabBal').classList.toggle('active', which==='bal');
+  document.getElementById('buyView').style.display = which==='buy'?'block':'none';
+  document.getElementById('balView').style.display = which==='bal'?'block':'none';
+  document.getElementById('status').className='card status';
+}
 
 function onAmount(){ amount = parseInt(document.getElementById('amount').value||0); document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active')); }
 function setAmt(v){ amount=v; document.getElementById('amount').value=v; document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', +c.textContent.replace(/,/g,'')===v)); }
 
 function show(type,title,msg){
-  document.getElementById('form').style.display='none';
+  document.getElementById('buyView').style.display='none';
+  document.getElementById('balView').style.display='none';
   const s=document.getElementById('status');
   s.className='card status show '+type;
   document.getElementById('ring').innerHTML = type==='pending'?'<div class="spinner"></div>':type==='ok'?'✓':'✕';
   document.getElementById('stTitle').textContent=title;
   document.getElementById('stMsg').textContent=msg;
 }
-function reset(){
+function resetView(){
   document.getElementById('status').className='card status';
-  document.getElementById('form').style.display='block';
   document.getElementById('tokenBox').style.display='none';
   document.getElementById('againBtn').style.display='none';
+  switchTab('buy');
 }
 
 async function pay(){
@@ -148,14 +197,12 @@ async function pay(){
   if(!/^(07|01|2547|2541|\+2547|\+2541)\d{7,8}$/.test(phone)){alert('Enter a valid Safaricom number');return;}
   if(amount<10){alert('Minimum amount is KES 10');return;}
 
-  // normalise to 2547XXXXXXXX
   phone=phone.replace(/^\+/,''); if(phone.startsWith('0')) phone='254'+phone.slice(1);
 
   const btn=document.getElementById('payBtn');
   btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Sending…';
 
   try{
-    // 1) Ask backend to trigger STK push
     const res=await fetch(API+'/api/stk-push',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({meter,phone,amount})
@@ -163,9 +210,7 @@ async function pay(){
     const data=await res.json();
     if(!res.ok||!data.checkoutRequestId) throw new Error(data.message||'Could not start payment');
 
-    show('pending','Check your phone','Enter your M-Pesa PIN to complete payment of KES '+amount+' to Pinnacle Developments (Paybill 4107817).');
-
-    // 2) Poll backend for result
+    show('pending','Check your phone','Enter your M-Pesa PIN to complete payment of KES '+amount+'.');
     poll(data.checkoutRequestId);
   }catch(e){
     show('err','Payment failed',e.message);
@@ -176,20 +221,17 @@ async function pay(){
 }
 
 async function poll(id,tries=0){
-  if(tries>40){ // ~2 min
-    show('err','Timed out','We didn’t get confirmation. If money was deducted, your token will be sent by SMS.');
+  if(tries>40){
+    show('err','Timed out','We didn’t get confirmation. If money was deducted, your units will still be credited shortly.');
     document.getElementById('againBtn').style.display='inline-block';return;
   }
   try{
     const r=await fetch(API+'/api/status/'+id);
     const d=await r.json();
     if(d.status==='SUCCESS'){
-      show('ok','Recharge sent','Payment received. Units have been sent directly to your meter — no token to enter.');
+      show('ok','Recharge complete','Payment received. Units have been credited directly to your meter.');
       const tb=document.getElementById('tokenBox');
-      let credited;
-      if(d.kwh){ credited=d.kwh+' kWh credited'; }
-      else { credited='KES '+amount+' credited'; }
-      tb.style.display='block'; tb.textContent=credited;
+      tb.style.display='block'; tb.textContent=(d.kwh?d.kwh+' kWh credited':'Units credited');
       document.getElementById('againBtn').style.display='inline-block';
       return;
     }
@@ -199,6 +241,28 @@ async function poll(id,tries=0){
     }
   }catch(e){/* keep polling */}
   setTimeout(()=>poll(id,tries+1),3000);
+}
+
+async function checkBalance(){
+  const meter=document.getElementById('balMeter').value.replace(/\D/g,'');
+  if(meter.length<9){alert('Enter a valid meter number');return;}
+  const btn=document.getElementById('balBtn');
+  btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Checking…';
+  const result=document.getElementById('balResult');
+  result.style.display='none';
+  try{
+    const r=await fetch(API+'/api/balance/'+meter);
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.message||'Could not check balance');
+    document.getElementById('balKwh').textContent = (d.balanceKwh!=null? Number(d.balanceKwh).toFixed(1) : '–');
+    document.getElementById('balName').textContent = d.name? ('Meter: '+d.name) : '';
+    document.getElementById('balOffline').style.display = d.online? 'none':'block';
+    result.style.display='block';
+  }catch(e){
+    alert(e.message);
+  }finally{
+    btn.disabled=false; btn.innerHTML='Check Balance';
+  }
 }
 </script>
 </body>
