@@ -336,4 +336,117 @@ function buildWeeklyReport() {
 // Weekly digest: Mondays 04:00 UTC (07:00 EAT).
 cron.schedule('0 4 * * 1', () => { sendEmail('Pinnacle Recharge - Weekly Report', buildWeeklyReport()); });
 
+// ════════════════════════════════════════════════
+// ADMIN — mobile dashboard (transactions, totals, failures, uptime)
+// Protected by ADMIN_KEY. Open: https://<backend>/admin?key=YOURKEY
+// ════════════════════════════════════════════════
+const START_TIME = Date.now();
+
+// Health/uptime JSON (also used by external monitors like UptimeRobot).
+app.get('/healthz', (req, res) => {
+  res.json({ ok: true, uptimeSeconds: Math.floor((Date.now() - START_TIME) / 1000) });
+});
+
+// Admin data (JSON) — the page fetches this.
+app.get('/api/admin/data', (req, res) => {
+  if (!process.env.ADMIN_KEY || req.query.key !== process.env.ADMIN_KEY) return res.status(403).json({ error: 'Forbidden' });
+  const rows = allTxns().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)); // newest first
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const todayIso = today.toISOString();
+  const todays = rows.filter(r => r.createdAt >= todayIso);
+  const paidToday = todays.filter(r => r.paidAt);
+  const num = n => Number(n || 0);
+  res.json({
+    uptimeSeconds: Math.floor((Date.now() - START_TIME) / 1000),
+    runningTotal: num(metaGet('runningTotal')),
+    today: {
+      payments: paidToday.length,
+      collected: paidToday.reduce((s, r) => s + num(r.paidAmount || r.chargedAmount), 0),
+      kwh: todays.filter(r => r.status === 'SUCCESS').reduce((s, r) => s + num(r.kwh), 0),
+    },
+    failures: rows.filter(r => r.status === 'VEND_FAILED').slice(0, 20),
+    recent: rows.slice(0, 40).map(r => ({
+      time: r.createdAt, meter: r.meter, amount: r.chargedAmount, kwh: r.kwh,
+      status: r.status, receipt: r.mpesaReceipt || null
+    })),
+  });
+});
+
+// Admin page (mobile-first HTML). Key is entered on the page, not in the URL.
+app.get('/admin', (req, res) => {
+  res.type('html').send(`<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>TBS Admin</title>
+<style>
+  :root{--bg:#0a1f1a;--panel:#0f2d24;--line:#1d4a3c;--green:#3ddc84;--text:#eafff5;--mute:#7fae9c;--red:#ff6b6b;--amber:#ffb627}
+  *{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+  body{background:var(--bg);color:var(--text);padding:16px;max-width:560px;margin:0 auto}
+  h1{font-size:18px;margin-bottom:2px}.sub{color:var(--mute);font-size:12px;margin-bottom:16px}
+  .gate{display:flex;gap:8px;margin-bottom:16px}
+  input{flex:1;background:#08191300;border:1.5px solid var(--line);border-radius:11px;padding:12px;color:var(--text);font-size:15px}
+  button{background:linear-gradient(135deg,#1db954,var(--green));color:#04150f;border:none;border-radius:11px;padding:12px 16px;font-weight:700;font-size:14px}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .card .k{color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  .card .v{font-size:22px;font-weight:700;margin-top:4px}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:middle}
+  .sec{font-size:13px;color:var(--green);font-weight:700;margin:16px 0 8px;text-transform:uppercase;letter-spacing:.5px}
+  .row{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin-bottom:8px;font-size:13px}
+  .row .top{display:flex;justify-content:space-between;align-items:center}
+  .meter{font-family:ui-monospace,monospace;font-weight:700}
+  .amt{font-weight:700}
+  .st{font-size:11px;padding:3px 8px;border-radius:20px;font-weight:700}
+  .SUCCESS{background:rgba(61,220,132,.15);color:var(--green)}
+  .PENDING,.CONFIRMING{background:rgba(255,182,39,.15);color:var(--amber)}
+  .FAILED,.VEND_FAILED{background:rgba(255,107,107,.15);color:var(--red)}
+  .meta{color:var(--mute);font-size:11px;margin-top:4px}
+  .refresh{width:100%;margin-top:6px;background:transparent;border:1.5px solid var(--line);color:var(--text)}
+  .err{color:var(--red);font-size:13px}
+</style></head><body>
+<h1>TBS Admin</h1><div class="sub">The Bounty Suites · Recharge dashboard</div>
+<div class="gate" id="gate">
+  <input id="key" type="password" placeholder="Admin key" autocomplete="off">
+  <button onclick="load()">Open</button>
+</div>
+<div id="content"></div>
+<script>
+function up(s){var d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d?d+'d '+h+'h':h?h+'h '+m+'m':m+'m';}
+function money(n){return 'KES '+Number(n||0).toLocaleString();}
+function when(t){try{return new Date(t).toLocaleString('en-KE',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}catch(e){return t;}}
+async function load(){
+  var key=document.getElementById('key').value.trim();
+  if(!key)return;
+  var c=document.getElementById('content');
+  c.innerHTML='<div class="sub">Loading…</div>';
+  try{
+    var r=await fetch('/api/admin/data?key='+encodeURIComponent(key));
+    if(r.status===403){c.innerHTML='<div class="err">Wrong key.</div>';return;}
+    var d=await r.json();
+    sessionStorage.setItem('k',key);
+    document.getElementById('gate').style.display='none';
+    var html='<div class="cards">'
+      +'<div class="card"><div class="k"><span class="dot"></span>Status</div><div class="v" style="font-size:15px">Online · '+up(d.uptimeSeconds)+'</div></div>'
+      +'<div class="card"><div class="k">Today\\'s payments</div><div class="v">'+d.today.payments+'</div></div>'
+      +'<div class="card"><div class="k">Collected today</div><div class="v">'+money(d.today.collected)+'</div></div>'
+      +'<div class="card"><div class="k">Units today</div><div class="v">'+(d.today.kwh||0).toFixed(1)+'<span style="font-size:13px;color:var(--mute)"> kWh</span></div></div>'
+      +'</div>';
+    if(d.failures&&d.failures.length){
+      html+='<div class="sec" style="color:var(--red)">⚠ Needs attention ('+d.failures.length+')</div>';
+      d.failures.forEach(function(f){html+='<div class="row"><div class="top"><span class="meter">'+f.meter+'</span><span class="amt">'+money(f.chargedAmount)+'</span></div><div class="meta">Paid but no units · receipt '+(f.mpesaReceipt||'—')+' · '+when(f.createdAt)+'</div></div>';});
+    }
+    html+='<div class="sec">Recent activity</div>';
+    if(!d.recent.length)html+='<div class="sub">No transactions yet.</div>';
+    d.recent.forEach(function(t){
+      html+='<div class="row"><div class="top"><span class="meter">'+t.meter+'</span><span class="st '+t.status+'">'+t.status+'</span></div>'
+        +'<div class="meta">'+money(t.amount)+(t.kwh?' · '+t.kwh+' kWh':'')+' · '+when(t.time)+(t.receipt?' · '+t.receipt:'')+'</div></div>';
+    });
+    html+='<button class="refresh" onclick="load()">Refresh</button>';
+    c.innerHTML=html;
+  }catch(e){c.innerHTML='<div class="err">Could not load. '+e.message+'</div>';}
+}
+var saved=sessionStorage.getItem('k');
+if(saved){document.getElementById('key').value=saved;load();}
+</script></body></html>`);
+});
+
 app.listen(3000, () => { console.log('Pinnacle recharge backend on :3000'); checkTariff(); });
